@@ -26,7 +26,6 @@ class ApiResearchConfig:
     create_user_path: str
     update_attributes_path: str
     trigger_action_path: str
-    updatable_attribute_types: Tuple[str, ...] = ("WIDGET",)
 
     @property
     def create_user_url(self) -> str:
@@ -64,42 +63,16 @@ class PosmatAPIClient:
         self,
         *,
         timeout: int,
-        dry_run: bool,
-        user_payload: Optional[Dict[str, Any]] = None,
     ) -> Tuple[str, str]:
         headers = {"Authorization": self.api_token}
 
-        LOGGER.info("step=create_user dry_run=%s", dry_run)
-        if dry_run:
-            LOGGER.info(
-                "dry_run create_user url=%s headers=%s payload=%s",
-                self.config.create_user_url,
-                headers,
-                user_payload,
-            )
-            return "dry-run-user-id", "dry-run-chat-id"
-
-        try:
-            response = self._request_with_retries(
-                "POST",
-                self.config.create_user_url,
-                headers=headers,
-                json_payload=user_payload,
-                timeout=timeout,
-            )
-        except RuntimeError:
-            if not user_payload:
-                raise
-            LOGGER.warning(
-                "step=create_user retry_without_payload=true payload=%s",
-                user_payload,
-            )
-            response = self._request_with_retries(
-                "POST",
-                self.config.create_user_url,
-                headers=headers,
-                timeout=timeout,
-            )
+        LOGGER.info("step=create_user")
+        response = self._request_with_retries(
+            "POST",
+            self.config.create_user_url,
+            headers=headers,
+            timeout=timeout,
+        )
         body = safe_json(response) or {}
         data = body.get("data", {})
         user_id = str(data.get("userId", "")).strip()
@@ -116,7 +89,6 @@ class PosmatAPIClient:
         chat_id: str,
         payload: Dict[str, Any],
         timeout: int,
-        dry_run: bool,
     ) -> None:
         headers = {
             "Authorization": self.api_token,
@@ -127,14 +99,10 @@ class PosmatAPIClient:
         url = self.config.update_attributes_url(chat_id)
 
         LOGGER.info(
-            "step=update_user_attributes dry_run=%s chat_id=%s attribute_count=%s",
-            dry_run,
+            "step=update_user_attributes chat_id=%s attribute_count=%s",
             chat_id,
             len(payload.get("attributes", {})),
         )
-        if dry_run:
-            LOGGER.info("dry_run update_user_attributes url=%s payload=%s", url, payload)
-            return
 
         self._request_with_retries(
             "PUT",
@@ -150,7 +118,6 @@ class PosmatAPIClient:
         user_id: str,
         payload: List[Dict[str, str]],
         timeout: int,
-        dry_run: bool,
     ) -> TriggerParseResult:
         headers = {
             "Authorization": self.api_token,
@@ -158,10 +125,7 @@ class PosmatAPIClient:
         }
         url = self.config.trigger_action_url(user_id)
 
-        LOGGER.info("step=trigger_action dry_run=%s user_id=%s", dry_run, user_id)
-        if dry_run:
-            LOGGER.info("dry_run trigger_action url=%s payload=%s", url, payload)
-            return TriggerParseResult()
+        LOGGER.info("step=trigger_action user_id=%s", user_id)
 
         response = self._request_with_retries(
             "POST",

@@ -35,27 +35,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", help="Directory for output CSV files.")
     parser.add_argument("--workers", type=int, help="Number of worker threads.")
     parser.add_argument("--timeout", type=int, help="Per-request timeout in seconds.")
-    parser.add_argument("--bot-content", help="Path to botContent JSON.")
     return parser.parse_args()
 
 
 def resolve_paths(
     project_root: Path,
     args: argparse.Namespace,
-    config: PosmatAIActionConfig,
-) -> Tuple[Path, Path, Path]:
+) -> Tuple[Path, Path]:
     input_path = Path(args.input) if args.input else project_root / "input_data" / "input.csv"
     output_dir = Path(args.output_dir) if args.output_dir else project_root / "output_data"
-    bot_content_path = Path(args.bot_content) if args.bot_content else Path(config.bot_content_path)
 
     if not input_path.is_absolute():
         input_path = project_root / input_path
     if not output_dir.is_absolute():
         output_dir = project_root / output_dir
-    if not bot_content_path.is_absolute():
-        bot_content_path = project_root / bot_content_path
 
-    return input_path, output_dir, bot_content_path
+    return input_path, output_dir
 
 
 def main() -> int:
@@ -69,35 +64,25 @@ def main() -> int:
         LOGGER.error("step=load_env_failed error=%s", exc)
         return 1
 
-    input_path, output_dir, bot_content_path = resolve_paths(project_root, args, config)
+    input_path, output_dir = resolve_paths(project_root, args)
     if not input_path.exists():
         LOGGER.error("step=input_missing path=%s", input_path)
-        return 1
-    if not bot_content_path.exists():
-        LOGGER.error("step=bot_content_missing path=%s", bot_content_path)
         return 1
 
     timeout = args.timeout if args.timeout is not None else config.request_timeout
     workers = args.workers if args.workers is not None else DEFAULT_WORKERS
 
     data_loader = PosmatActionDataLoader()
-    bot_content = data_loader.load_bot_content_json(bot_content_path)
-    attribute_catalog = data_loader.get_attribute_catalog(bot_content)
     test_inputs = data_loader.load_from_csv(input_path)
 
     api_config = create_api_research_config(config.base_url, config.bot_public_id)
     api_client = PosmatAPIClient(api_config, config.api_token)
-    evaluator = PosmatAIActionEvaluator(
-        api_client=api_client,
-        attribute_catalog=attribute_catalog,
-        updatable_attribute_types=api_config.updatable_attribute_types,
-    )
+    evaluator = PosmatAIActionEvaluator(api_client=api_client)
 
     results = evaluator.run(
         test_inputs,
         workers=workers,
         timeout=timeout,
-        dry_run=False,
     )
 
     writer = CSVResultWriter(

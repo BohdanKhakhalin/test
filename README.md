@@ -18,7 +18,7 @@ The manual command for IntelliJ IDEA or a local terminal still works and is the 
 
 ## Project Purpose
 
-This project sends CSV-defined test rows through the Posmat public API, updates bot attributes from bot content metadata, triggers AI actions, and saves a timestamped CSV with extracted results.
+This project sends CSV-defined test rows through the Posmat public API, infers the needed routing attributes from each input prompt, triggers AI actions, and saves a timestamped CSV with extracted results.
 
 ## Architecture Overview
 
@@ -87,9 +87,6 @@ Copy `.env.example` to `.env` and fill in:
 - `API_TOKEN`
 - `BOT_PUBLIC_ID`
 - `REQUEST_TIMEOUT`
-- `BOT_CONTENT_PATH`
-
-`BOT_CONTENT_PATH` defaults to `C:/Users/bohda/Downloads/botContent.json`.
 
 ## Scripts
 
@@ -103,8 +100,8 @@ Creates a user for each CSV row, updates supported attributes, triggers the AI a
 
 1. Loads runtime configuration from `.env`.
 2. Reads input rows from CSV while preserving order.
-3. Builds an attribute catalog from the bot content JSON.
-4. Creates a user and updates matching attributes for each row.
+3. Infers routing attributes from each input row.
+4. Creates a user and updates the inferred attributes for each row.
 5. Sends the trigger input to the chat endpoint and extracts the action name and output from SSE events.
 6. Writes ordered results to `output_data/run_posmat_ai_actions_YYYYMMDD_HHMMSS.csv`.
 
@@ -133,7 +130,6 @@ The evaluator infers routing context such as `order_id`, `location`, `refund_rea
 .venv\Scripts\python.exe run_posmat_ai_actions.py --input input_data\input.csv - run the script in Idea.
 .venv\Scripts\python.exe run_posmat_ai_actions.py --input input_data\input.csv --workers 5
 .venv\Scripts\python.exe run_posmat_ai_actions.py --input input_data\input.csv --timeout 90
-.venv\Scripts\python.exe run_posmat_ai_actions.py --bot-content C:\path\to\botContent.json
 ```
 
 ## Notes
@@ -141,5 +137,6 @@ The evaluator infers routing context such as `order_id`, `location`, `refund_rea
 - The script still accepts the old `python src\run_posmat_ai_actions.py ...` invocation.
 - Attribute updates are sent with the per-row `chat_id`, while the chat trigger still uses the per-row `user_id`.
 - The CLI always performs real API calls; there is no dry-run mode.
+- `BOT_CONTENT_PATH` is no longer required.
 - Output files are written to `output_data/`.
 - Research notes remain in `docs/api_research.md`.

@@ -16,7 +16,6 @@ from posmat_ai_automation.evaluations.ai_actions.models import (
 )
 
 LOGGER = logging.getLogger("posmat_ai_actions")
-RESERVED_INPUT_COLUMNS = {"input", "trigger_input", "row_index"}
 ALLOWED_CHATBOT_ATTRIBUTES = {
     "location",
     "order_id",
@@ -75,15 +74,8 @@ PAYMENT_ISSUE_PATTERNS: Tuple[Tuple[Tuple[str, ...], str], ...] = (
 class PosmatAIActionEvaluator(BaseEvaluator):
     """Run Posmat AI actions for CSV-defined input rows."""
 
-    def __init__(
-        self,
-        api_client: PosmatAPIClient,
-        attribute_catalog: Mapping[str, Mapping[str, str]],
-        updatable_attribute_types: Sequence[str],
-    ) -> None:
+    def __init__(self, api_client: PosmatAPIClient) -> None:
         self.api_client = api_client
-        self.attribute_catalog = attribute_catalog
-        self.updatable_attribute_types = tuple(updatable_attribute_types)
 
     def evaluate(
         self,
@@ -91,7 +83,6 @@ class PosmatAIActionEvaluator(BaseEvaluator):
         **kwargs: Any,
     ) -> PosmatActionRecord:
         timeout = int(kwargs.get("timeout"))
-        dry_run = bool(kwargs.get("dry_run", False))
         row = test_input.row_data
         result = PosmatActionRecord(row_index=test_input.row_index)
 
@@ -106,11 +97,8 @@ class PosmatAIActionEvaluator(BaseEvaluator):
             return result
 
         try:
-            user_payload = self._build_user_payload(row)
             user_id, chat_id = self.api_client.create_user(
                 timeout=timeout,
-                dry_run=dry_run,
-                user_payload=user_payload,
             )
             result.user_id = user_id
             result.chat_id = chat_id
@@ -121,7 +109,6 @@ class PosmatAIActionEvaluator(BaseEvaluator):
                     chat_id=chat_id,
                     payload=attributes_payload,
                     timeout=timeout,
-                    dry_run=dry_run,
                 )
             else:
                 LOGGER.info(
@@ -134,11 +121,10 @@ class PosmatAIActionEvaluator(BaseEvaluator):
                 user_id=user_id,
                 payload=trigger_payload,
                 timeout=timeout,
-                dry_run=dry_run,
             )
             result.triggered_ai_action_name = trigger_result.action_name
             result.ai_action_output = trigger_result.ai_action_output
-            result.status = "dry_run" if dry_run else "success"
+            result.status = "success"
             return result
         except Exception as exc:  # noqa: BLE001
             result.status = "failed"
@@ -156,7 +142,6 @@ class PosmatAIActionEvaluator(BaseEvaluator):
         *,
         workers: int,
         timeout: int,
-        dry_run: bool,
     ) -> List[PosmatActionRecord]:
         results: List[Optional[PosmatActionRecord]] = [None] * len(test_inputs)
 
@@ -166,7 +151,6 @@ class PosmatAIActionEvaluator(BaseEvaluator):
                     self.evaluate,
                     test_input,
                     timeout=timeout,
-                    dry_run=dry_run,
                 ): test_input.row_index
                 for test_input in test_inputs
             }
@@ -202,82 +186,16 @@ class PosmatAIActionEvaluator(BaseEvaluator):
 
         return text
 
-    def _build_user_payload(self, row: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
-        payload: Dict[str, Any] = {}
-        user_field_map = {
-            "username": "username",
-            "email": "email",
-            "user_email": "user_email",
-            "language": "language",
-            "first_name": "firstName",
-            "last_name": "lastName",
-            "full_name": "fullName",
-            "display_name": "displayName",
-        }
-
-        for row_key, payload_key in user_field_map.items():
-            normalized = self._normalize_scalar(row.get(row_key))
-            if normalized is not None:
-                payload[payload_key] = normalized
-        return payload or None
-
     def _build_attributes_payload(
         self,
         row: Mapping[str, Any],
         input_text: str,
     ) -> Dict[str, Any]:
-        allowed_types = set(self.updatable_attribute_types)
-        attributes: Dict[str, Any] = {}
-        skipped: List[str] = []
-
-        for raw_key, raw_value in row.items():
-            key = str(raw_key).strip()
-            if key in RESERVED_INPUT_COLUMNS:
-                continue
-
-            normalized = self._normalize_scalar(raw_value)
-            if normalized is None:
-                continue
-
-            candidate_name = key[5:] if key.startswith("attr_") else key
-            metadata = self.attribute_catalog.get(candidate_name)
-            if not metadata:
-                continue
-
-            attr_type = metadata.get("type", "")
-            if attr_type in allowed_types or candidate_name in ALLOWED_CHATBOT_ATTRIBUTES:
-                attributes[candidate_name] = normalized
-            else:
-                skipped.append(f"{candidate_name}({attr_type or 'UNKNOWN'})")
-
-        attributes_json = self._normalize_scalar(row.get("attributes_json"))
-        if isinstance(attributes_json, dict):
-            for key, value in attributes_json.items():
-                metadata = self.attribute_catalog.get(key)
-                if not metadata or value is None:
-                    continue
-                attr_type = metadata.get("type", "")
-                if attr_type in allowed_types or key in ALLOWED_CHATBOT_ATTRIBUTES:
-                    attributes[key] = value
-                else:
-                    skipped.append(f"{key}({attr_type or 'UNKNOWN'})")
-
-        for key, value in self._infer_context_from_input(input_text).items():
-            metadata = self.attribute_catalog.get(key)
-            if not metadata:
-                continue
-            attr_type = metadata.get("type", "")
-            if attr_type in allowed_types or key in ALLOWED_CHATBOT_ATTRIBUTES:
-                attributes.setdefault(key, value)
-            else:
-                skipped.append(f"{key}({attr_type or 'UNKNOWN'})")
-
-        if skipped:
-            LOGGER.info(
-                "step=build_attributes_payload skipped_non_public_attributes=%s",
-                ", ".join(sorted(set(skipped))),
-            )
-
+        attributes = {
+            key: value
+            for key, value in self._collect_context(row, input_text).items()
+            if key in ALLOWED_CHATBOT_ATTRIBUTES
+        }
         return {"attributes": attributes}
 
     def _build_trigger_payload(
