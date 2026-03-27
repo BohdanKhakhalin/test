@@ -36,11 +36,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--workers", type=int, help="Number of worker threads.")
     parser.add_argument("--timeout", type=int, help="Per-request timeout in seconds.")
     parser.add_argument("--bot-content", help="Path to botContent JSON.")
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Build requests without sending them.",
-    )
     return parser.parse_args()
 
 
@@ -102,7 +97,7 @@ def main() -> int:
         test_inputs,
         workers=workers,
         timeout=timeout,
-        dry_run=bool(args.dry_run),
+        dry_run=False,
     )
 
     writer = CSVResultWriter(

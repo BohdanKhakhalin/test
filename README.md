@@ -113,11 +113,8 @@ Creates a user for each CSV row, updates supported attributes, triggers the AI a
 | Column | Required | Description |
 |---|---|---|
 | `input` | Yes | User message sent to the trigger endpoint |
-| `trigger_input` | No | Fallback column name if `input` is empty |
-| `email`, `username`, `first_name`, `last_name`, `display_name`, `full_name` | No | Optional persona fields forwarded when creating the chat user |
-| `attr_<name>` | No | Optional attribute value mapped to bot content attribute `<name>` |
-| `<attribute_name>` | No | Direct attribute column when it exists in bot content |
-| `attributes_json` | No | JSON object of attribute overrides |
+
+The evaluator infers routing context such as `order_id`, `location`, `refund_reason`, `shipping_priority`, `payment_method`, and `payment_issue` directly from the natural-language input when possible, so the CSV can stay input-only.
 
 **Output CSV columns**
 
@@ -136,7 +133,6 @@ Creates a user for each CSV row, updates supported attributes, triggers the AI a
 .venv\Scripts\python.exe run_posmat_ai_actions.py --input input_data\input.csv - run the script in Idea.
 .venv\Scripts\python.exe run_posmat_ai_actions.py --input input_data\input.csv --workers 5
 .venv\Scripts\python.exe run_posmat_ai_actions.py --input input_data\input.csv --timeout 90
-.venv\Scripts\python.exe run_posmat_ai_actions.py --input input_data\input.csv --dry-run
 .venv\Scripts\python.exe run_posmat_ai_actions.py --bot-content C:\path\to\botContent.json
 ```
 
@@ -144,6 +140,6 @@ Creates a user for each CSV row, updates supported attributes, triggers the AI a
 
 - The script still accepts the old `python src\run_posmat_ai_actions.py ...` invocation.
 - Attribute updates are sent with the per-row `chat_id`, while the chat trigger still uses the per-row `user_id`.
+- The CLI always performs real API calls; there is no dry-run mode.
 - Output files are written to `output_data/`.
 - Research notes remain in `docs/api_research.md`.
-
